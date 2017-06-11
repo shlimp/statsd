@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"time"
+	"golang.org/x/net/context"
 )
 
 type config struct {
@@ -19,6 +20,7 @@ type clientConfig struct {
 }
 
 type connConfig struct {
+	Ctx			  context.Context
 	Addr          string
 	ErrorHandler  func(error)
 	FlushPeriod   time.Duration
@@ -37,6 +39,12 @@ type Option func(*config)
 func Address(addr string) Option {
 	return Option(func(c *config) {
 		c.Conn.Addr = addr
+	})
+}
+
+func Context(ctx context.Context) Option {
+	return Option(func(c *config) {
+		c.Conn.Ctx = ctx
 	})
 }
 

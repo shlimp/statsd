@@ -1,6 +1,9 @@
 package statsd
 
-import "time"
+import (
+	"time"
+	"golang.org/x/net/context"
+)
 
 // A Client represents a StatsD client.
 type Client struct {
@@ -20,7 +23,7 @@ func New(opts ...Option) (*Client, error) {
 		},
 		Conn: connConfig{
 			Addr:        ":8125",
-			FlushPeriod: 100 * time.Millisecond,
+			FlushPeriod: 0,
 			// Worst-case scenario:
 			// Ethernet MTU - IPv6 Header - TCP Header = 1500 - 40 - 20 = 1440
 			MaxPacketSize: 1440,
@@ -76,11 +79,11 @@ func (c *Client) Clone(opts ...Option) *Client {
 }
 
 // Count adds n to bucket.
-func (c *Client) Count(bucket string, n interface{}) {
+func (c *Client) Count(ctx context.Context, bucket string, n interface{}) {
 	if c.skip() {
 		return
 	}
-	c.conn.metric(c.prefix, bucket, n, "c", c.rate, c.tags)
+	c.conn.metric(ctx, c.prefix, bucket, n, "c", c.rate, c.tags)
 }
 
 func (c *Client) skip() bool {
@@ -88,32 +91,32 @@ func (c *Client) skip() bool {
 }
 
 // Increment increment the given bucket. It is equivalent to Count(bucket, 1).
-func (c *Client) Increment(bucket string) {
-	c.Count(bucket, 1)
+func (c *Client) Increment(ctx context.Context, bucket string) {
+	c.Count(ctx, bucket, 1)
 }
 
 // Gauge records an absolute value for the given bucket.
-func (c *Client) Gauge(bucket string, value interface{}) {
+func (c *Client) Gauge(ctx context.Context, bucket string, value interface{}) {
 	if c.skip() {
 		return
 	}
-	c.conn.gauge(c.prefix, bucket, value, c.tags)
+	c.conn.gauge(ctx, c.prefix, bucket, value, c.tags)
 }
 
 // Timing sends a timing value to a bucket.
-func (c *Client) Timing(bucket string, value interface{}) {
+func (c *Client) Timing(ctx context.Context, bucket string, value interface{}) {
 	if c.skip() {
 		return
 	}
-	c.conn.metric(c.prefix, bucket, value, "ms", c.rate, c.tags)
+	c.conn.metric(ctx, c.prefix, bucket, value, "ms", c.rate, c.tags)
 }
 
 // Histogram sends an histogram value to a bucket.
-func (c *Client) Histogram(bucket string, value interface{}) {
+func (c *Client) Histogram(ctx context.Context, bucket string, value interface{}) {
 	if c.skip() {
 		return
 	}
-	c.conn.metric(c.prefix, bucket, value, "h", c.rate, c.tags)
+	c.conn.metric(ctx, c.prefix, bucket, value, "h", c.rate, c.tags)
 }
 
 // A Timing is an helper object that eases sending timing values.
@@ -128,8 +131,8 @@ func (c *Client) NewTiming() Timing {
 }
 
 // Send sends the time elapsed since the creation of the Timing.
-func (t Timing) Send(bucket string) {
-	t.c.Timing(bucket, int(t.Duration()/time.Millisecond))
+func (t Timing) Send(ctx context.Context, bucket string) {
+	t.c.Timing(ctx, bucket, int(t.Duration()/time.Millisecond))
 }
 
 // Duration returns the time elapsed since the creation of the Timing.
@@ -138,11 +141,11 @@ func (t Timing) Duration() time.Duration {
 }
 
 // Unique sends the given value to a set bucket.
-func (c *Client) Unique(bucket string, value string) {
+func (c *Client) Unique(ctx context.Context, bucket string, value string) {
 	if c.skip() {
 		return
 	}
-	c.conn.unique(c.prefix, bucket, value, c.tags)
+	c.conn.unique(ctx, c.prefix, bucket, value, c.tags)
 }
 
 // Flush flushes the Client's buffer.

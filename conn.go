@@ -1,16 +1,17 @@
 package statsd
 
 import (
-	"io"
 	"math/rand"
-	"net"
+	"google.golang.org/appengine/socket"
 	"strconv"
 	"sync"
 	"time"
+	"golang.org/x/net/context"
 )
 
 type conn struct {
 	// Fields settable with options at Client's creation.
+	ctx			  context.Context
 	addr          string
 	errorHandler  func(error)
 	flushPeriod   time.Duration
@@ -21,13 +22,18 @@ type conn struct {
 	mu sync.Mutex
 	// Fields guarded by the mutex.
 	closed    bool
-	w         io.WriteCloser
+	w         *socket.Conn
 	buf       []byte
 	rateCache map[float32]string
 }
 
+func (c *conn) SetContext(ctx context.Context) {
+	c.w.SetContext(ctx)
+}
+
 func newConn(conf connConfig, muted bool) (*conn, error) {
 	c := &conn{
+		ctx:		   conf.Ctx,
 		addr:          conf.Addr,
 		errorHandler:  conf.ErrorHandler,
 		flushPeriod:   conf.FlushPeriod,
@@ -41,7 +47,7 @@ func newConn(conf connConfig, muted bool) (*conn, error) {
 	}
 
 	var err error
-	c.w, err = dialTimeout(c.network, c.addr, 5*time.Second)
+	c.w, err = dialTimeout(c.ctx, c.network, c.addr, 5*time.Second)
 	if err != nil {
 		return c, err
 	}
@@ -81,8 +87,9 @@ func newConn(conf connConfig, muted bool) (*conn, error) {
 	return c, nil
 }
 
-func (c *conn) metric(prefix, bucket string, n interface{}, typ string, rate float32, tags string) {
+func (c *conn) metric(ctx context.Context, prefix, bucket string, n interface{}, typ string, rate float32, tags string) {
 	c.mu.Lock()
+	c.SetContext(ctx)
 	l := len(c.buf)
 	c.appendBucket(prefix, bucket, tags)
 	c.appendNumber(n)
@@ -93,8 +100,9 @@ func (c *conn) metric(prefix, bucket string, n interface{}, typ string, rate flo
 	c.mu.Unlock()
 }
 
-func (c *conn) gauge(prefix, bucket string, value interface{}, tags string) {
+func (c *conn) gauge(ctx context.Context, prefix, bucket string, value interface{}, tags string) {
 	c.mu.Lock()
+	c.SetContext(ctx)
 	l := len(c.buf)
 	// To set a gauge to a negative value we must first set it to 0.
 	// https://github.com/etsy/statsd/blob/master/docs/metric_types.md#gauges
@@ -114,8 +122,9 @@ func (c *conn) appendGauge(value interface{}, tags string) {
 	c.closeMetric(tags)
 }
 
-func (c *conn) unique(prefix, bucket string, value string, tags string) {
+func (c *conn) unique(ctx context.Context, prefix, bucket string, value string, tags string) {
 	c.mu.Lock()
+	c.SetContext(ctx)
 	l := len(c.buf)
 	c.appendBucket(prefix, bucket, tags)
 	c.appendString(value)
@@ -264,7 +273,7 @@ func (c *conn) handleError(err error) {
 
 // Stubbed out for testing.
 var (
-	dialTimeout = net.DialTimeout
+	dialTimeout = socket.DialTimeout
 	now         = time.Now
 	randFloat   = rand.Float32
 )
