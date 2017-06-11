@@ -32,7 +32,7 @@ https://godoc.org/gopkg.in/alexcesaro/statsd.v2
 
 ## Download
 
-    go get https://github.com/shlimp/statsd
+    go get github.com/shlimp/statsd
 
 
 ## Example
